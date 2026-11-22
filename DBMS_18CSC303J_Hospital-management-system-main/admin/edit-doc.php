@@ -1,74 +1,59 @@
+<?php
+session_start();
 
-    <?php
-    
-    
+if (empty($_SESSION['user']) || ($_SESSION['usertype'] ?? '') !== 'a') {
+    header('Location: ../login.php');
+    exit;
+}
 
-    //import database
-    include("../connection.php");
+include('../connection.php');
+$error = '3';
+$id = filter_input(INPUT_POST, 'id00', FILTER_VALIDATE_INT);
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && $id > 0) {
+    $name = trim($_POST['name'] ?? '');
+    $nic = trim($_POST['nic'] ?? '');
+    $oldEmail = trim($_POST['oldemail'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $phone = trim($_POST['Tele'] ?? '');
+    $specialty = filter_var($_POST['spec'] ?? null, FILTER_VALIDATE_INT);
+    $password = (string) ($_POST['password'] ?? '');
+    $confirmPassword = (string) ($_POST['cpassword'] ?? '');
 
+    if ($password === '' || !hash_equals($password, $confirmPassword)) {
+        $error = '2';
+    } elseif (strlen($password) < 10 || $specialty === false || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = '3';
+    } else {
+        $check = $database->prepare('SELECT docid FROM doctor WHERE docemail = ? LIMIT 1');
+        $check->bind_param('s', $email);
+        $check->execute();
+        $existing = $check->get_result()->fetch_assoc();
+        $check->close();
 
-    if($_POST){
-        //print_r($_POST);
-        $result= $database->query("select * from webuser");
-        $name=$_POST['name'];
-        $nic=$_POST['nic'];
-        $oldemail=$_POST["oldemail"];
-        $spec=$_POST['spec'];
-        $email=$_POST['email'];
-        $tele=$_POST['Tele'];
-        $password=$_POST['password'];
-        $cpassword=$_POST['cpassword'];
-        $id=$_POST['id00'];
-        
-        if ($password==$cpassword){
-            $error='3';
-            $result= $database->query("select doctor.docid from doctor inner join webuser on doctor.docemail=webuser.email where webuser.email='$email';");
-            //$resultqq= $database->query("select * from doctor where docid='$id';");
-            if($result->num_rows==1){
-                $id2=$result->fetch_assoc()["docid"];
-            }else{
-                $id2=$id;
+        if ($existing && (int) $existing['docid'] !== $id) {
+            $error = '1';
+        } else {
+            try {
+                $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+                $updateDoctor = $database->prepare('UPDATE doctor SET docemail = ?, docname = ?, docpassword = ?, docnic = ?, doctel = ?, specialties = ? WHERE docid = ?');
+                $updateDoctor->bind_param('sssssii', $email, $name, $passwordHash, $nic, $phone, $specialty, $id);
+                $updateDoctor->execute();
+                $updateDoctor->close();
+
+                $updateUser = $database->prepare('UPDATE webuser SET email = ? WHERE email = ?');
+                $updateUser->bind_param('ss', $email, $oldEmail);
+                $updateUser->execute();
+                $updateUser->close();
+                $error = '4';
+            } catch (mysqli_sql_exception $exception) {
+                error_log('Doctor account update failed: ' . $exception->getMessage());
+                $error = '3';
             }
-            
-            echo $id2."jdfjdfdh";
-            if($id2!=$id){
-                $error='1';
-                //$resultqq1= $database->query("select * from doctor where docemail='$email';");
-                //$did= $resultqq1->fetch_assoc()["docid"];
-                //if($resultqq1->num_rows==1){
-                    
-            }else{
-
-                //$sql1="insert into doctor(docemail,docname,docpassword,docnic,doctel,specialties) values('$email','$name','$password','$nic','$tele',$spec);";
-                $sql1="update doctor set docemail='$email',docname='$name',docpassword='$password',docnic='$nic',doctel='$tele',specialties=$spec where docid=$id ;";
-                $database->query($sql1);
-                
-                $sql1="update webuser set email='$email' where email='$oldemail' ;";
-                $database->query($sql1);
-                //echo $sql1;
-                //echo $sql2;
-                $error= '4';
-                
-            }
-            
-        }else{
-            $error='2';
         }
-    
-    
-        
-        
-    }else{
-        //header('location: signup.php');
-        $error='3';
     }
-    
+}
 
-    header("location: doctors.php?action=edit&error=".$error."&id=".$id);
-    ?>
-    
-   
-
-</body>
-</html>
+header('Location: doctors.php?action=edit&error=' . urlencode($error) . '&id=' . (int) $id);
+exit;
+?>
