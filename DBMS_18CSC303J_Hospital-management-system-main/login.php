@@ -15,104 +15,78 @@
 </head>
 <body>
     <?php
+$secureCookie = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'secure' => $secureCookie,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+session_start();
 
-    //learn from w3schools.com
-    //Unset all the server side variables
+date_default_timezone_set('Asia/Kolkata');
+$_SESSION['date'] = date('Y-m-d');
+include('connection.php');
 
-    session_start();
+$error = '<label for="promter" class="form-label">&nbsp;</label>';
 
-    $_SESSION["user"]="";
-    $_SESSION["usertype"]="";
-    
-    // Set the new timezone
-    date_default_timezone_set('Asia/Kolkata');
-    $date = date('Y-m-d');
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email = trim($_POST['useremail'] ?? '');
+    $password = (string) ($_POST['userpassword'] ?? '');
 
-    $_SESSION["date"]=$date;
-    
+    $userStmt = $database->prepare('SELECT usertype FROM webuser WHERE email = ? LIMIT 1');
+    $userStmt->bind_param('s', $email);
+    $userStmt->execute();
+    $userRow = $userStmt->get_result()->fetch_assoc();
+    $userStmt->close();
 
-    //import database
-    include("connection.php");
+    // Table and column names are selected only from this fixed allow-list.
+    $accountTables = [
+        'p' => ['patient', 'pemail', 'ppassword', 'patient/index.php'],
+        'd' => ['doctor', 'docemail', 'docpassword', 'doctor/index.php'],
+        'a' => ['admin', 'aemail', 'apassword', 'admin/index.php'],
+    ];
 
-    
+    $authenticated = false;
+    if ($userRow && isset($accountTables[$userRow['usertype']]) && $email !== '' && $password !== '') {
+        [$table, $emailColumn, $passwordColumn, $redirect] = $accountTables[$userRow['usertype']];
+        $lookup = $database->prepare("SELECT {$passwordColumn} AS stored_password FROM {$table} WHERE {$emailColumn} = ? LIMIT 1");
+        $lookup->bind_param('s', $email);
+        $lookup->execute();
+        $account = $lookup->get_result()->fetch_assoc();
+        $lookup->close();
 
+        if ($account) {
+            $storedPassword = (string) $account['stored_password'];
+            $passwordInfo = password_get_info($storedPassword);
+            $isModernHash = isset($passwordInfo['algoName']) && $passwordInfo['algoName'] !== 'unknown';
+            $passwordMatches = $isModernHash
+                ? password_verify($password, $storedPassword)
+                : hash_equals($storedPassword, $password);
 
-
-    if($_POST){
-
-        $email=$_POST['useremail'];
-        $password=$_POST['userpassword'];
-        
-        $error='<label for="promter" class="form-label"></label>';
-
-        $result= $database->query("select * from webuser where email='$email'");
-        if($result->num_rows==1){
-            $utype=$result->fetch_assoc()['usertype'];
-            if ($utype=='p'){
-                //TODO
-                $checker = $database->query("select * from patient where pemail='$email' and ppassword='$password'");
-                if ($checker->num_rows==1){
-
-
-                    //   Patient dashbord
-                    $_SESSION['user']=$email;
-                    $_SESSION['usertype']='p';
-                    
-                    header('location: patient/index.php');
-
-                }else{
-                    $error='<label for="promter" class="form-label" style="color:rgb(255, 62, 62);text-align:center;">Wrong credentials: Invalid email or password</label>';
+            if ($passwordMatches) {
+                // Upgrade legacy plaintext demo credentials after successful login.
+                if (!$isModernHash) {
+                    $newHash = password_hash($password, PASSWORD_DEFAULT);
+                    $upgrade = $database->prepare("UPDATE {$table} SET {$passwordColumn} = ? WHERE {$emailColumn} = ?");
+                    $upgrade->bind_param('ss', $newHash, $email);
+                    $upgrade->execute();
+                    $upgrade->close();
                 }
 
-            }elseif($utype=='a'){
-                //TODO
-                $checker = $database->query("select * from admin where aemail='$email' and apassword='$password'");
-                if ($checker->num_rows==1){
-
-
-                    //   Admin dashbord
-                    $_SESSION['user']=$email;
-                    $_SESSION['usertype']='a';
-                    
-                    header('location: admin/index.php');
-
-                }else{
-                    $error='<label for="promter" class="form-label" style="color:rgb(255, 62, 62);text-align:center;">Wrong credentials: Invalid email or password</label>';
-                }
-
-
-            }elseif($utype=='d'){
-                //TODO
-                $checker = $database->query("select * from doctor where docemail='$email' and docpassword='$password'");
-                if ($checker->num_rows==1){
-
-
-                    //   doctor dashbord
-                    $_SESSION['user']=$email;
-                    $_SESSION['usertype']='d';
-                    header('location: doctor/index.php');
-
-                }else{
-                    $error='<label for="promter" class="form-label" style="color:rgb(255, 62, 62);text-align:center;">Wrong credentials: Invalid email or password</label>';
-                }
-
+                session_regenerate_id(true);
+                $_SESSION['user'] = $email;
+                $_SESSION['usertype'] = $userRow['usertype'];
+                header('Location: ' . $redirect);
+                exit;
             }
-            
-        }else{
-            $error='<label for="promter" class="form-label" style="color:rgb(255, 62, 62);text-align:center;">We cant found any acount for this email.</label>';
         }
-
-
-
-
-
-
-        
-    }else{
-        $error='<label for="promter" class="form-label">&nbsp;</label>';
     }
 
-    ?>
+    $error = '<label for="promter" class="form-label" style="color:rgb(255, 62, 62);text-align:center;">Invalid email or password.</label>';
+}
+?>
 
 
 
