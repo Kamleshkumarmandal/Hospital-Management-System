@@ -1,89 +1,61 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="../css/animations.css">  
-    <link rel="stylesheet" href="../css/main.css">  
-    <link rel="stylesheet" href="../css/admin.css">
-        
-    <title>Doctor</title>
-    <style>
-        .popup{
-            animation: transitionIn-Y-bottom 0.5s;
-        }
-</style>
-</head>
-<body>
-    <?php
+<?php
+session_start();
 
-    //learn from w3schools.com
+if (empty($_SESSION['user']) || ($_SESSION['usertype'] ?? '') !== 'a') {
+    header('Location: ../login.php');
+    exit;
+}
 
-    session_start();
+include('../connection.php');
+$error = '3';
 
-    if(isset($_SESSION["user"])){
-        if(($_SESSION["user"])=="" or $_SESSION['usertype']!='a'){
-            header("location: ../login.php");
-        }
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $name = trim($_POST['name'] ?? '');
+    $nic = trim($_POST['nic'] ?? '');
+    $specialty = filter_var($_POST['spec'] ?? null, FILTER_VALIDATE_INT);
+    $email = trim($_POST['email'] ?? '');
+    $phone = trim($_POST['Tele'] ?? '');
+    $password = (string) ($_POST['password'] ?? '');
+    $confirmPassword = (string) ($_POST['cpassword'] ?? '');
 
-    }else{
-        header("location: ../login.php");
-    }
-    
-    
+    if ($password !== '' && strlen($password) >= 10 && hash_equals($password, $confirmPassword) && $specialty !== false && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $check = $database->prepare('SELECT email FROM webuser WHERE email = ? LIMIT 1');
+        $check->bind_param('s', $email);
+        $check->execute();
+        $exists = $check->get_result()->num_rows > 0;
+        $check->close();
 
-    //import database
-    include("../connection.php");
+        if ($exists) {
+            $error = '1';
+        } else {
+            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+            try {
+                $doctorInsert = $database->prepare('INSERT INTO doctor (docemail, docname, docpassword, docnic, doctel, specialties) VALUES (?, ?, ?, ?, ?, ?)');
+                $doctorInsert->bind_param('sssssi', $email, $name, $passwordHash, $nic, $phone, $specialty);
+                $doctorInsert->execute();
+                $doctorInsert->close();
 
-
-
-    if($_POST){
-        //print_r($_POST);
-        $result= $database->query("select * from webuser");
-        $name=$_POST['name'];
-        $nic=$_POST['nic'];
-        $spec=$_POST['spec'];
-        $email=$_POST['email'];
-        $tele=$_POST['Tele'];
-        $password=$_POST['password'];
-        $cpassword=$_POST['cpassword'];
-        
-        if ($password==$cpassword){
-            $error='3';
-            $result= $database->query("select * from webuser where email='$email';");
-            if($result->num_rows==1){
-                $error='1';
-            }else{
-
-                $sql1="insert into doctor(docemail,docname,docpassword,docnic,doctel,specialties) values('$email','$name','$password','$nic','$tele',$spec);";
-                $sql2="insert into webuser values('$email','d')";
-                $database->query($sql1);
-                $database->query($sql2);
-
-                //echo $sql1;
-                //echo $sql2;
-                $error= '4';
-                
+                $userType = 'd';
+                $userInsert = $database->prepare('INSERT INTO webuser (email, usertype) VALUES (?, ?)');
+                $userInsert->bind_param('ss', $email, $userType);
+                $userInsert->execute();
+                $userInsert->close();
+                $error = '4';
+            } catch (mysqli_sql_exception $exception) {
+                // Existing SQL dump uses MyISAM; clean up manually if needed.
+                $cleanup = $database->prepare('DELETE FROM doctor WHERE docemail = ?');
+                $cleanup->bind_param('s', $email);
+                $cleanup->execute();
+                $cleanup->close();
+                error_log('Doctor account creation failed: ' . $exception->getMessage());
+                $error = '3';
             }
-            
-        }else{
-            $error='2';
         }
-    
-    
-        
-        
-    }else{
-        //header('location: signup.php');
-        $error='3';
+    } elseif (!hash_equals($password, $confirmPassword)) {
+        $error = '2';
     }
-    
+}
 
-    header("location: doctors.php?action=add&error=".$error);
-    ?>
-    
-   
-
-</body>
-</html>
+header('Location: doctors.php?action=add&error=' . urlencode($error));
+exit;
+?>
