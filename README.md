@@ -4,7 +4,7 @@ This repository contains the original PHP/MySQL appointment-management coursewor
 
 ## Live demo
 
-<https://share.streamlit.io/>
+https://hospital-management-system-hude4n5sgn5ezqkdwrwfw6.streamlit.app/
 
 [![Deploy on Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/)
 
