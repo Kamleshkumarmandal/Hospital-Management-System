@@ -24,6 +24,10 @@
     //learn from w3schools.com
 
     session_start();
+    if (empty($_SESSION['booking_csrf'])) {
+        $_SESSION['booking_csrf'] = bin2hex(random_bytes(32));
+    }
+    $csrfToken = $_SESSION['booking_csrf'];
 
     if(isset($_SESSION["user"])){
         if(($_SESSION["user"])=="" or $_SESSION['usertype']!='p'){
@@ -229,6 +233,7 @@
                                     
                                     echo '
                                         <form action="booking-complete.php" method="post">
+                                            <input type="hidden" name="csrf_token" value="'.$csrfToken.'" >
                                             <input type="hidden" name="scheduleid" value="'.$scheduleid.'" >
                                             <input type="hidden" name="apponum" value="'.$apponum.'" >
                                             <input type="hidden" name="date" value="'.$today.'" >
