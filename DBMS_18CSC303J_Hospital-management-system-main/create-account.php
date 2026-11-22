@@ -17,78 +17,82 @@
 </head>
 <body>
 <?php
-
-//learn from w3schools.com
-//Unset all the server side variables
-
 session_start();
-
-$_SESSION["user"]="";
-$_SESSION["usertype"]="";
-
-// Set the new timezone
 date_default_timezone_set('Asia/Kolkata');
-$date = date('Y-m-d');
+$_SESSION['date'] = date('Y-m-d');
 
-$_SESSION["date"]=$date;
-
-
-//import database
-include("connection.php");
-
-
-
-
-
-if($_POST){
-
-    $result= $database->query("select * from webuser");
-
-    $fname=$_SESSION['personal']['fname'];
-    $lname=$_SESSION['personal']['lname'];
-    $name=$fname." ".$lname;
-    $address=$_SESSION['personal']['address'];
-    $nic=$_SESSION['personal']['nic'];
-    $dob=$_SESSION['personal']['dob'];
-    $email=$_POST['newemail'];
-    $tele=$_POST['tele'];
-    $newpassword=$_POST['newpassword'];
-    $cpassword=$_POST['cpassword'];
-    
-    if ($newpassword==$cpassword){
-        $sqlmain= "select * from webuser where email=?;";
-        $stmt = $database->prepare($sqlmain);
-        $stmt->bind_param("s",$email);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        if($result->num_rows==1){
-            $error='<label for="promter" class="form-label" style="color:rgb(255, 62, 62);text-align:center;">Already have an account for this Email address.</label>';
-        }else{
-            //TODO
-            $database->query("insert into patient(pemail,pname,ppassword, paddress, pnic,pdob,ptel) values('$email','$name','$newpassword','$address','$nic','$dob','$tele');");
-            $database->query("insert into webuser values('$email','p')");
-
-            //print_r("insert into patient values($pid,'$email','$fname','$lname','$newpassword','$address','$nic','$dob','$tele');");
-            $_SESSION["user"]=$email;
-            $_SESSION["usertype"]="p";
-            $_SESSION["username"]=$fname;
-
-            header('Location: patient/index.php');
-            $error='<label for="promter" class="form-label" style="color:rgb(255, 62, 62);text-align:center;"></label>';
-        }
-        
-    }else{
-        $error='<label for="promter" class="form-label" style="color:rgb(255, 62, 62);text-align:center;">Password Conformation Error! Reconform Password</label>';
-    }
-
-
-
-    
-}else{
-    //header('location: signup.php');
-    $error='<label for="promter" class="form-label"></label>';
+if (empty($_SESSION['personal']) || !is_array($_SESSION['personal'])) {
+    header('Location: signup.php');
+    exit;
 }
 
+include('connection.php');
+$error = '<label for="promter" class="form-label">&nbsp;</label>';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $personal = $_SESSION['personal'];
+    $fname = trim($personal['fname'] ?? '');
+    $lname = trim($personal['lname'] ?? '');
+    $name = trim($fname . ' ' . $lname);
+    $address = trim($personal['address'] ?? '');
+    $nic = trim($personal['nic'] ?? '');
+    $dob = $personal['dob'] ?? '';
+    $email = trim($_POST['newemail'] ?? '');
+    $tele = trim($_POST['tele'] ?? '');
+    $newpassword = (string) ($_POST['newpassword'] ?? '');
+    $cpassword = (string) ($_POST['cpassword'] ?? '');
+
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = '<label class="form-label" style="color:#ff3e3e;text-align:center;">Enter a valid email address.</label>';
+    } elseif (strlen($newpassword) < 10) {
+        $error = '<label class="form-label" style="color:#ff3e3e;text-align:center;">Use a password with at least 10 characters.</label>';
+    } elseif (!hash_equals($newpassword, $cpassword)) {
+        $error = '<label class="form-label" style="color:#ff3e3e;text-align:center;">Passwords do not match.</label>';
+    } else {
+        $check = $database->prepare('SELECT email FROM webuser WHERE email = ? LIMIT 1');
+        $check->bind_param('s', $email);
+        $check->execute();
+        $exists = $check->get_result()->num_rows > 0;
+        $check->close();
+
+        if ($exists) {
+            $error = '<label class="form-label" style="color:#ff3e3e;text-align:center;">An account already exists for this email address.</label>';
+        } else {
+            $passwordHash = password_hash($newpassword, PASSWORD_DEFAULT);
+            try {
+                $patientInsert = $database->prepare('INSERT INTO patient (pemail, pname, ppassword, paddress, pnic, pdob, ptel) VALUES (?, ?, ?, ?, ?, ?, ?)');
+                $patientInsert->bind_param('sssssss', $email, $name, $passwordHash, $address, $nic, $dob, $tele);
+                $patientInsert->execute();
+                $patientInsert->close();
+
+                $userType = 'p';
+                $webUserInsert = $database->prepare('INSERT INTO webuser (email, usertype) VALUES (?, ?)');
+                $webUserInsert->bind_param('ss', $email, $userType);
+                $webUserInsert->execute();
+                $webUserInsert->close();
+
+                session_regenerate_id(true);
+                $_SESSION['user'] = $email;
+                $_SESSION['usertype'] = 'p';
+                $_SESSION['username'] = $fname;
+                unset($_SESSION['personal']);
+                header('Location: patient/index.php');
+                exit;
+            } catch (mysqli_sql_exception $exception) {
+                // The legacy SQL dump uses MyISAM; compensate manually if the
+                // second insert fails because MyISAM does not support transactions.
+                $cleanup = $database->prepare('DELETE FROM patient WHERE pemail = ?');
+                $cleanup->bind_param('s', $email);
+                $cleanup->execute();
+                $cleanup->close();
+                error_log('Patient account creation failed: ' . $exception->getMessage());
+                $error = '<label class="form-label" style="color:#ff3e3e;text-align:center;">Could not create the account. Please try again.</label>';
+            }
+        }
+    }
+} else {
+    $error = '<label for="promter" class="form-label">&nbsp;</label>';
+}
 ?>
 
 
@@ -130,7 +134,7 @@ if($_POST){
             </tr>
             <tr>
                 <td class="label-td" colspan="2">
-                    <input type="password" name="newpassword" class="input-text" placeholder="New Password" required>
+                    <input type="password" name="newpassword" class="input-text" placeholder="New Password" minlength="10" required>
                 </td>
             </tr>
             <tr>
@@ -140,7 +144,7 @@ if($_POST){
             </tr>
             <tr>
                 <td class="label-td" colspan="2">
-                    <input type="password" name="cpassword" class="input-text" placeholder="Conform Password" required>
+                    <input type="password" name="cpassword" class="input-text" placeholder="Confirm Password" minlength="10" required>
                 </td>
             </tr>
      
