@@ -19,8 +19,6 @@
 
 session_start();
 
-$_SESSION["user"]="";
-$_SESSION["usertype"]="";
 
 // Set the new timezone
 date_default_timezone_set('Asia/Kolkata');
@@ -43,7 +41,6 @@ if($_POST){
     );
 
 
-    print_r($_SESSION["personal"]);
     header("location: create-account.php");
 
 
