@@ -4,18 +4,22 @@ This repository contains the original PHP/MySQL appointment-management coursewor
 
 ## Live demo
 
-**Streamlit deployment target:** select this repository, branch `main`, and main file path `app.py` at [Streamlit Community Cloud](https://share.streamlit.io/). After deployment, copy the generated `*.streamlit.app` URL into this section. No public demo URL is claimed until Streamlit has actually created one.
+<https://share.streamlit.io/>
+
+[![Deploy on Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/)
+
+**Deployment settings:** Select this repository, branch `main`, and main file path `app.py`. Streamlit will issue the public `*.streamlit.app` address after deployment. Add the generated address here once Streamlit has created it; no unverified demo URL is listed.
 
 ## Streamlit demo features
 
 - Dashboard overview for doctors, patients and appointments.
-- Doctor directory with specialty filter and session-only add form.
+- Doctor directory with specialty filtering and a session-only add form.
 - Synthetic patient directory with search and session-only registration.
 - Appointment register, filters, status updates and CSV export.
-- Appointment booking with validation against past dates, unavailable doctors and duplicate doctor time slots.
-- All demo data is fictional and resets when the Streamlit session is reset.
+- Appointment booking with checks for past dates, unavailable doctors and duplicate doctor/time slots.
+- All demo data is fictional and resets when the Streamlit session resets.
 
-### Run the demo locally
+### Run locally
 
 ```powershell
 py -m venv .venv
@@ -38,11 +42,11 @@ Set these environment variables for the PHP app:
 - `DB_USER` — database user (defaults to `root`)
 - `DB_PASSWORD` — database password (defaults to empty for local XAMPP only)
 
-The PHP login flow accepts legacy plaintext demo passwords once and upgrades a successfully verified password to PHP's password hash format. Replace default test credentials before any non-local use.
+The PHP login flow accepts legacy plaintext demo passwords once and upgrades a successfully verified password to PHP's password hash format. New patient and doctor passwords are stored with `password_hash`. Replace default test credentials before any non-local use.
 
 ## Important safety notice
 
-The Streamlit app is a fictional workflow demonstration, not a live hospital information system. Do not enter actual patient records, medical histories or contact details. It does not provide diagnosis, prescribing, clinical decision support, or production-grade authentication/audit storage. Do not deploy the legacy PHP/MySQL source with its default credentials as a production healthcare service.
+The Streamlit app is a fictional workflow demonstration, not a live hospital information system. Do not enter actual patient records, medical histories or contact details. It does not provide diagnosis, prescriptions, clinical decision support, or production-grade authentication/audit storage. Do not deploy the legacy PHP/MySQL source with its default credentials as a production healthcare service.
 
 ## Tests
 
@@ -51,7 +55,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-The CI workflow runs the Streamlit helper tests and PHP syntax lint checks.
+GitHub Actions runs the Streamlit helper tests, Python syntax check and PHP syntax lint checks.
 
 ## License
 
